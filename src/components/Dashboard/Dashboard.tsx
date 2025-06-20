@@ -15,12 +15,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const {
     currentCycle,
     isLoading,
+    error,
     updateFoodEntry,
     startNewCycle,
     restartFromCycle1,
     getCurrentDay,
     getRemainingDays,
-  } = useFoodTracking();
+  } = useFoodTracking(user.id);
 
   const { exportToPDF } = usePDFExport();
 
@@ -30,6 +31,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your food tracking data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-2xl">⚠️</span>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Data</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentCycle) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No cycle data available</p>
         </div>
       </div>
     );

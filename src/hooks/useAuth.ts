@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, RegisterData } from '../types';
-import { storage } from '../utils/storage';
-
-const ADMIN_CREDENTIALS = {
-  username: 'admin',
-  password: '123456',
-};
+import { AuthService } from '../services/authService';
+import { supabase } from '../lib/supabase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -13,88 +9,55 @@ export const useAuth = () => {
   const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
-    const savedUser = storage.getUser();
-    if (savedUser && savedUser.isAuthenticated) {
-      setUser(savedUser);
-    }
-    setIsLoading(false);
+    // Check for existing session
+    const checkSession = async () => {
+      const { user: currentUser } = await AuthService.getCurrentUser();
+      setUser(currentUser);
+      setIsLoading(false);
+    };
+
+    checkSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const { user: currentUser } = await AuthService.getCurrentUser();
+        setUser(currentUser);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = (username: string, password: string): boolean => {
-    // Check admin credentials
-    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-      const adminUser: User = {
-        id: 'admin',
-        username: ADMIN_CREDENTIALS.username,
-        email: 'admin@foodtrack.com',
-        isAuthenticated: true,
-        isAdmin: true,
-      };
-      setUser(adminUser);
-      storage.setUser(adminUser);
-      return true;
-    }
-
-    // Check registered users
-    const registeredUsers = storage.getRegisteredUsers();
-    const foundUser = registeredUsers.find(u => u.username === username && u.password === password);
+  const login = async (email: string, password: string): Promise<boolean> => {
+    const { user: loggedInUser, error } = await AuthService.signIn(email, password);
     
-    if (foundUser) {
-      const userToLogin: User = {
-        id: foundUser.id,
-        username: foundUser.username,
-        email: foundUser.email,
-        isAuthenticated: true,
-        isAdmin: false,
-      };
-      setUser(userToLogin);
-      storage.setUser(userToLogin);
-      return true;
-    }
-
-    return false;
-  };
-
-  const register = (data: RegisterData): boolean => {
-    const registeredUsers = storage.getRegisteredUsers();
-    
-    // Check if username or email already exists
-    const userExists = registeredUsers.some(u => 
-      u.username === data.username || u.email === data.email
-    );
-    
-    if (userExists) {
+    if (error) {
+      console.error('Login error:', error);
       return false;
     }
 
-    // Create new user
-    const newUser = {
-      id: Date.now().toString(),
-      username: data.username,
-      email: data.email,
-      password: data.password,
-    };
-
-    registeredUsers.push(newUser);
-    storage.setRegisteredUsers(registeredUsers);
-
-    // Auto-login the new user
-    const userToLogin: User = {
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
-      isAuthenticated: true,
-      isAdmin: false,
-    };
-    setUser(userToLogin);
-    storage.setUser(userToLogin);
-    
+    setUser(loggedInUser);
     return true;
   };
 
-  const logout = (): void => {
+  const register = async (data: RegisterData): Promise<boolean> => {
+    const { user: newUser, error } = await AuthService.signUp(data);
+    
+    if (error) {
+      console.error('Registration error:', error);
+      return false;
+    }
+
+    setUser(newUser);
+    return true;
+  };
+
+  const logout = async (): Promise<void> => {
+    await AuthService.signOut();
     setUser(null);
-    storage.removeUser();
   };
 
   const switchToRegister = () => setShowRegister(true);

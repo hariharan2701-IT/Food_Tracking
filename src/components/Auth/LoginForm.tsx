@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { User, Lock, AlertCircle, UserPlus } from 'lucide-react';
 
 interface LoginFormProps {
-  onLogin: (username: string, password: string) => boolean;
+  onLogin: (email: string, password: string) => Promise<boolean>;
   onSwitchToRegister: () => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegister }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,13 +17,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
     setError('');
     setIsLoading(true);
 
-    // Simulate loading for better UX
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const success = onLogin(username, password);
+    const success = await onLogin(email, password);
     
     if (!success) {
-      setError('Invalid credentials. Please try again.');
+      setError('Invalid credentials. Please check your email and password.');
       setPassword('');
     }
     
@@ -44,18 +41,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Enter your username"
+                  placeholder="Enter your email"
                   required
                 />
               </div>

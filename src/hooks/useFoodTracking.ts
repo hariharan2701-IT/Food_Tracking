@@ -1,63 +1,41 @@
 import { useState, useEffect } from 'react';
-import { CycleData, TrackingData, FoodEntry } from '../types';
-import { storage } from '../utils/storage';
+import { CycleData, FoodEntry } from '../types';
+import { FoodTrackingService } from '../services/foodTrackingService';
 import { dateUtils } from '../utils/dateUtils';
 
-const createEmptyTrackingData = (): TrackingData => {
-  const data: TrackingData = {};
-  for (let i = 1; i <= 30; i++) {
-    data[i] = {
-      morning: '',
-      noon: '',
-      evening: '',
-      totalCalories: '',
-    };
-  }
-  return data;
-};
-
-const createNewCycle = (cycleNumber: number = 1, userId: string): CycleData => ({
-  cycleNumber,
-  startDate: dateUtils.getCurrentDate(),
-  trackingData: createEmptyTrackingData(),
-  userId,
-});
-
-export const useFoodTracking = () => {
+export const useFoodTracking = (userId: string | null) => {
   const [currentCycle, setCurrentCycle] = useState<CycleData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const currentUser = storage.getUser();
-    if (!currentUser) {
+    if (!userId) {
       setIsLoading(false);
       return;
     }
 
-    const savedCycleData = storage.getCycleData(currentUser.id);
-    
-    if (savedCycleData) {
-      // Check if current cycle is complete and needs to reset
-      if (dateUtils.isCycleComplete(savedCycleData.startDate)) {
-        const newCycle = createNewCycle(savedCycleData.cycleNumber + 1, currentUser.id);
-        setCurrentCycle(newCycle);
-        storage.setCycleData(newCycle);
+    const loadCycleData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      const { cycle, error: cycleError } = await FoodTrackingService.getCurrentCycle(userId);
+      
+      if (cycleError) {
+        setError(cycleError);
       } else {
-        setCurrentCycle(savedCycleData);
+        setCurrentCycle(cycle);
       }
-    } else {
-      // First time user - create initial cycle
-      const initialCycle = createNewCycle(1, currentUser.id);
-      setCurrentCycle(initialCycle);
-      storage.setCycleData(initialCycle);
-    }
-    
-    setIsLoading(false);
-  }, []);
+      
+      setIsLoading(false);
+    };
 
-  const updateFoodEntry = (day: number, field: keyof FoodEntry, value: string): void => {
-    if (!currentCycle) return;
+    loadCycleData();
+  }, [userId]);
 
+  const updateFoodEntry = async (day: number, field: keyof FoodEntry, value: string): Promise<void> => {
+    if (!currentCycle?.id) return;
+
+    // Update local state immediately for better UX
     const updatedCycle = {
       ...currentCycle,
       trackingData: {
@@ -68,25 +46,54 @@ export const useFoodTracking = () => {
         },
       },
     };
-    
     setCurrentCycle(updatedCycle);
-    storage.setCycleData(updatedCycle);
+
+    // Update in database
+    const { error: updateError } = await FoodTrackingService.updateFoodEntry(
+      currentCycle.id,
+      day,
+      field,
+      value
+    );
+
+    if (updateError) {
+      setError(updateError);
+      // Revert local state on error
+      setCurrentCycle(currentCycle);
+    }
   };
 
-  const startNewCycle = (): void => {
-    if (!currentCycle) return;
+  const startNewCycle = async (): Promise<void> => {
+    if (!currentCycle || !userId) return;
 
-    const newCycle = createNewCycle(currentCycle.cycleNumber + 1, currentCycle.userId);
-    setCurrentCycle(newCycle);
-    storage.setCycleData(newCycle);
+    setIsLoading(true);
+    const { cycle, error: cycleError } = await FoodTrackingService.createNewCycle(
+      userId,
+      currentCycle.cycleNumber + 1
+    );
+
+    if (cycleError) {
+      setError(cycleError);
+    } else {
+      setCurrentCycle(cycle);
+    }
+    
+    setIsLoading(false);
   };
 
-  const restartFromCycle1 = (): void => {
-    if (!currentCycle) return;
+  const restartFromCycle1 = async (): Promise<void> => {
+    if (!userId) return;
 
-    const restartedCycle = createNewCycle(1, currentCycle.userId);
-    setCurrentCycle(restartedCycle);
-    storage.setCycleData(restartedCycle);
+    setIsLoading(true);
+    const { cycle, error: cycleError } = await FoodTrackingService.restartFromCycle1(userId);
+
+    if (cycleError) {
+      setError(cycleError);
+    } else {
+      setCurrentCycle(cycle);
+    }
+    
+    setIsLoading(false);
   };
 
   const getCurrentDay = (): number => {
@@ -100,8 +107,9 @@ export const useFoodTracking = () => {
   };
 
   return {
-    currentCycle: currentCycle || createNewCycle(1, 'temp'),
+    currentCycle,
     isLoading,
+    error,
     updateFoodEntry,
     startNewCycle,
     restartFromCycle1,

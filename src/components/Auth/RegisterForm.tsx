@@ -3,7 +3,7 @@ import { User, Lock, Mail, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-re
 import { RegisterData } from '../../types';
 
 interface RegisterFormProps {
-  onRegister: (data: RegisterData) => boolean;
+  onRegister: (data: RegisterData) => Promise<boolean>;
   onSwitchToLogin: () => void;
 }
 
@@ -45,10 +45,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
 
     setIsLoading(true);
 
-    // Simulate loading for better UX
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const success = onRegister(formData);
+    const success = await onRegister(formData);
     
     if (!success) {
       setError('Username or email already exists. Please try different credentials.');
