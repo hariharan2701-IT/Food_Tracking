@@ -82,8 +82,10 @@ export class FoodTrackingService {
         return { cycle: null, error: cycleError.message };
       }
 
-      // Create empty food entries for all 30 days
+      // Create empty food entries for all 30 days in batches for better performance
+      const batchSize = 10;
       const entries = [];
+      
       for (let i = 1; i <= 30; i++) {
         entries.push({
           cycle_id: cycleData.id,
@@ -95,12 +97,16 @@ export class FoodTrackingService {
         });
       }
 
-      const { error: entriesError } = await supabase
-        .from('food_entries')
-        .insert(entries);
+      // Insert entries in batches
+      for (let i = 0; i < entries.length; i += batchSize) {
+        const batch = entries.slice(i, i + batchSize);
+        const { error: entriesError } = await supabase
+          .from('food_entries')
+          .insert(batch);
 
-      if (entriesError) {
-        return { cycle: null, error: entriesError.message };
+        if (entriesError) {
+          return { cycle: null, error: entriesError.message };
+        }
       }
 
       // Create tracking data
@@ -180,6 +186,33 @@ export class FoodTrackingService {
       return await this.createNewCycle(userId, 1);
     } catch (error) {
       return { cycle: null, error: 'An unexpected error occurred' };
+    }
+  }
+
+  // Batch update multiple entries for better performance
+  static async batchUpdateEntries(
+    updates: Array<{
+      cycleId: string;
+      day: number;
+      field: keyof FoodEntry;
+      value: string;
+    }>
+  ): Promise<{ error: string | null }> {
+    try {
+      const promises = updates.map(update => 
+        this.updateFoodEntry(update.cycleId, update.day, update.field, update.value)
+      );
+
+      const results = await Promise.all(promises);
+      const errors = results.filter(result => result.error).map(result => result.error);
+
+      if (errors.length > 0) {
+        return { error: `Failed to update ${errors.length} entries` };
+      }
+
+      return { error: null };
+    } catch (error) {
+      return { error: 'An unexpected error occurred during batch update' };
     }
   }
 }
